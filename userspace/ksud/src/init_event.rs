@@ -268,28 +268,6 @@ pub fn soft_reboot() -> Result<()> {
     if !status.success() {
         warn!("stop exited with status: {status}");
     }
-
-    // Wait for Android init to stop zygote and tear down framework services.
-    let start = std::time::Instant::now();
-    let timeout = std::time::Duration::from_millis(2000);
-    let poll_interval = std::time::Duration::from_millis(50);
-    let rp = resetprop();
-    while start.elapsed() < timeout {
-        let zygote_stopped = rp.get("init.svc.zygote").as_deref() == Some("stopped");
-        let secondary_stopped = match rp.get("init.svc.zygote_secondary") {
-            Some(ref s) => s == "stopped",
-            None => true,
-        };
-        if zygote_stopped && secondary_stopped {
-            break;
-        }
-        std::thread::sleep(poll_interval);
-    }
-
-    // The framework is down; whatever still holds a module directory is a
-    // daemon the last cycle's stage scripts left behind, and the scripts are
-    // about to run again.
-    crate::module::kill_leftover_daemons();
     info!("post-fs-data");
     on_post_data_fs()?;
     info!("start");
