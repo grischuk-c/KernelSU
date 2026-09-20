@@ -118,7 +118,7 @@ ifneq ($(GIT_ROOT),$(KERNEL_GIT_ROOT))
 # Only set version if it's a different repo from kernel
 $(shell cd $(GIT_ROOT) && [ -f .git/shallow ] && $(GIT) fetch --unshallow 2>/dev/null || true)
 KSU_GIT_VERSION := $(shell cd $(GIT_ROOT) && $(GIT) rev-list --count HEAD 2>/dev/null)
-KSU_GIT_VERSION_VALID := 1
+#KSU_GIT_VERSION_VALID := 1
 $(info -- KernelSU: Git repo detected at $(GIT_ROOT))
 endif
 endif
@@ -136,7 +136,7 @@ ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
 else
 # If there is no .git directory, use default version
 $(warning "KSU_GIT_VERSION not defined! It is better to make KernelSU a git repository!")
-KSU_VERSION ?= 32601
+KSU_VERSION ?= 32640
 $(info -- KernelSU fallback version: $(KSU_VERSION))
 ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
 endif
