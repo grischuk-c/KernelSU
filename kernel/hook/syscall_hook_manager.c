@@ -295,7 +295,7 @@ static struct kretprobe setresuid_kretprobe = {
     .data_size = sizeof(uid_t),
 };
 
-static int samsung_setresuid_hook_init(void)
+static int __init samsung_setresuid_hook_init(void)
 {
     int ret = register_kretprobe(&setresuid_kretprobe);
 
