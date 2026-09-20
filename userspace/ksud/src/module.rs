@@ -281,15 +281,48 @@ pub fn exec_stage_script(stage: &str, block: bool) -> Result<()> {
 /// what reaches a daemon an earlier cycle already left behind an unlinked
 /// copy of.
 fn holds_module_dir(pid: i32) -> bool {
-    let under_module_dir = |path: PathBuf| path.to_string_lossy().starts_with(MODULE_DIR);
+    let matches_dir = |s: &str| {
+        s.contains(defs::MODULE_DIR)
+            || s.contains(defs::MODULE_DIR.trim_end_matches('/'))
+            || s.contains(defs::METAMODULE_DIR)
+            || s.contains(defs::METAMODULE_DIR.trim_end_matches('/'))
+    };
 
-    if std::fs::read_link(format!("/proc/{pid}/exe")).is_ok_and(under_module_dir) {
+    if std::fs::read_link(format!("/proc/{pid}/exe"))
+        .is_ok_and(|p| matches_dir(&p.to_string_lossy()))
+    {
         return true;
     }
-    if std::fs::read_link(format!("/proc/{pid}/cwd")).is_ok_and(under_module_dir) {
+    if std::fs::read_link(format!("/proc/{pid}/cwd"))
+        .is_ok_and(|p| matches_dir(&p.to_string_lossy()))
+    {
         return true;
     }
-    std::fs::read_to_string(format!("/proc/{pid}/maps")).is_ok_and(|maps| maps.contains(MODULE_DIR))
+    if std::fs::read_to_string(format!("/proc/{pid}/cmdline"))
+        .is_ok_and(|cmd| matches_dir(&cmd))
+    {
+        return true;
+    }
+    if std::fs::read_to_string(format!("/proc/{pid}/environ"))
+        .is_ok_and(|env| matches_dir(&env) || env.contains("KSU_MODULE="))
+    {
+        return true;
+    }
+    if std::fs::read_to_string(format!("/proc/{pid}/maps"))
+        .is_ok_and(|maps| matches_dir(&maps))
+    {
+        return true;
+    }
+    if let Ok(fds) = std::fs::read_dir(format!("/proc/{pid}/fd")) {
+        for fd in fds.flatten() {
+            if let Ok(target) = std::fs::read_link(fd.path()) {
+                if matches_dir(&target.to_string_lossy()) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 fn process_group_of(pid: i32) -> Option<i32> {
@@ -350,6 +383,7 @@ pub fn kill_leftover_daemons() {
     }
 
     if pids.is_empty() {
+        info!("soft-reboot: no leftover module daemons found");
         return;
     }
 
