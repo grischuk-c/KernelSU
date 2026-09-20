@@ -353,22 +353,44 @@ pub fn kill_leftover_daemons() {
         return;
     }
 
-    for signal in [libc::SIGTERM, libc::SIGKILL] {
+    // Graceful termination: first send SIGTERM so daemons can run their shutdown
+    // handlers (cleaning up sockets, lock files, flushing databases, etc.).
+    for &pgrp in &groups {
+        unsafe { libc::kill(-pgrp, libc::SIGTERM) };
+    }
+    for &pid in &pids {
+        unsafe { libc::kill(pid, libc::SIGTERM) };
+    }
+
+    // Give daemons time to exit gracefully. We poll every 50ms for up to 3 seconds,
+    // breaking as soon as all module daemons have terminated.
+    let start = std::time::Instant::now();
+    let timeout = std::time::Duration::from_millis(3000);
+    let poll_interval = std::time::Duration::from_millis(50);
+
+    let mut remaining = pids.clone();
+    while !remaining.is_empty() && start.elapsed() < timeout {
+        std::thread::sleep(poll_interval);
+        remaining.retain(|&pid| unsafe { libc::kill(pid, 0) == 0 });
+    }
+
+    // Force-kill any stubborn processes that didn't terminate gracefully within the timeout.
+    if !remaining.is_empty() {
+        warn!(
+            "soft-reboot: {} daemon(s) did not exit after SIGTERM within {:?}, sending SIGKILL",
+            remaining.len(),
+            timeout
+        );
         for &pgrp in &groups {
-            unsafe { libc::kill(-pgrp, signal) };
+            unsafe { libc::kill(-pgrp, libc::SIGKILL) };
         }
-        for &pid in &pids {
-            unsafe { libc::kill(pid, signal) };
-        }
-        if signal == libc::SIGTERM {
-            // Both LSPosed and Sui keep a sqlite database open. WAL survives
-            // a kill either way; the grace costs a third of a second.
-            std::thread::sleep(std::time::Duration::from_millis(300));
+        for &pid in &remaining {
+            unsafe { libc::kill(pid, libc::SIGKILL) };
         }
     }
 
     info!(
-        "soft-reboot: killed {} leftover module daemon(s) in {} group(s)",
+        "soft-reboot: stopped {} leftover module daemon(s) in {} group(s)",
         pids.len(),
         groups.len()
     );
