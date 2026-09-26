@@ -678,10 +678,9 @@ pub fn run() -> Result<()> {
             }
             if soft_reboot {
                 info!("late-load complete, triggering soft-reboot...");
-                let exe_path = std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from(crate::defs::DAEMON_PATH));
-                let _ = std::process::Command::new(exe_path)
-                    .arg("soft-reboot")
-                    .spawn();
+                if let Err(e) = crate::init_event::soft_reboot() {
+                    error!("soft-reboot failed: {e}");
+                }
             }
             result
         }
