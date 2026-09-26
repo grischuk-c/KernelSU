@@ -669,8 +669,12 @@ pub fn run() -> Result<()> {
             }
             if soft_reboot && result.is_ok() {
                 info!("Late-load succeeded, triggering soft-reboot...");
-                return init_event::soft_reboot();
-            }
+                use std::os::unix::process::CommandExt;
+                let exe = std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("ksud"));
+                let err = std::process::Command::new(exe).arg("soft-reboot").exec();
+                return Err(anyhow::anyhow!("Failed to exec soft-reboot: {}", err));
+             }
+
             result
         }
         Commands::Services => {
