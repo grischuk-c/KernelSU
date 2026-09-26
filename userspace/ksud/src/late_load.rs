@@ -34,7 +34,7 @@ fn dump_process_info(label: &str) {
     );
 }
 
-pub fn run(_package_name: &String, kmi: Option<String>, stage_from: String, soft_reboot: bool, allow_shell: bool) -> Result<()> {
+pub fn run(_package_name: &String, kmi: Option<String>, stage_from: String, allow_shell: bool) -> Result<()> {
     info!("late-load command triggered!");
     dump_process_info("late-load start");
 
@@ -127,12 +127,9 @@ pub fn run(_package_name: &String, kmi: Option<String>, stage_from: String, soft
     init_event::run_stage("post-mount", true);
 
     // 12. Execute service stage scripts (non-blocking)
-    if !soft_reboot {
-        init_event::run_stage("service", false);
-    }
+    init_event::run_stage("service", false);
+    
     // 13. Execute boot-completed stage scripts (non-blocking)
-    if !soft_reboot {
-        init_event::run_stage("boot-completed", false);
-    }
+    init_event::run_stage("boot-completed", false);
     Ok(())
 }
