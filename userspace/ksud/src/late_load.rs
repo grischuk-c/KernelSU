@@ -141,6 +141,9 @@ pub fn run(_package_name: &String, kmi: Option<String>, stage_from: String, allo
         warn!("init features failed: {e}");
     }
 
+    crate::ksucalls::report_post_fs_data();
+    crate::ksucalls::report_boot_complete();
+
     // 8. Execute late-load stage scripts (blocking)
     //
     // Module stage scripts assume the environment a boot gives them: their
