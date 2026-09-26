@@ -354,10 +354,6 @@ pub fn daemonize_with<F: FnOnce() -> Result<()>>(use_init_pgrp: bool, configure:
     Ok(())
 }
 
-pub fn daemonize(use_init_pgrp: bool) -> Result<()> {
-    daemonize_with(use_init_pgrp, || Ok(()))
-}
-
 pub fn create_daemon(use_init_pgrp: bool) -> Result<bool> {
     create_daemon_with(use_init_pgrp, || Ok(()))
 }
@@ -433,4 +429,50 @@ pub fn detach_process_group(use_init_pgrp: bool) {
     if let Err(e2) = setpgid(None, None) {
         log::error!("failed to set process group: {e2:?}");
     }
+}
+
+pub fn set_partitions_ro() -> i32 {
+    use std::os::unix::fs::FileTypeExt;
+    use std::os::unix::io::AsRawFd;
+
+    const PARTITIONS: &[&str] = &[
+        "boot", "dtbo", "init_boot", "vendor_boot",
+        "super",
+        "optics", "prism",
+        "vbmeta",
+    ];
+    // BLKROSET = _IO(0x12, 93); bionic ioctl takes c_int for request
+    const BLKROSET: libc::c_int = 0x125d;
+
+    let mut count = 0i32;
+
+    for base in PARTITIONS {
+        for suffix in ["", "_a", "_b"] {
+            let path = format!("/dev/block/by-name/{base}{suffix}");
+
+            // anyhow::Ok shadows the built-in Ok in this file; qualify explicitly
+            let file = match std::fs::File::open(&path) {
+                std::result::Result::Ok(f) => f,
+                Err(_) => continue,
+            };
+
+            match file.metadata() {
+                std::result::Result::Ok(m) if m.file_type().is_block_device() => {}
+                _ => continue,
+            }
+
+            let on: libc::c_int = 1;
+            let ret = unsafe { libc::ioctl(file.as_raw_fd(), BLKROSET, &on) };
+            if ret == 0 {
+                count += 1;
+            } else {
+                log::warn!(
+                    "set_partitions_ro: BLKROSET failed for {path}: {}",
+                    std::io::Error::last_os_error()
+                );
+            }
+        }
+    }
+
+    count
 }

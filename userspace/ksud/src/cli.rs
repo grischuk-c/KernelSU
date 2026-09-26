@@ -67,6 +67,14 @@ enum Commands {
         /// Stage ksud from specified path
         #[arg(long, default_value_t = String::from("/data/local/tmp/.ksud-stage"))]
         stage_from: String,
+
+        /// Run soft-reboot automatically after late-load completes
+        #[arg(long)]
+        soft_reboot: bool,
+
+        /// Set kernel/bootloader partitions read-only after late-load completes
+        #[arg(long)]
+        ro_partitions: bool,
     },
 
     /// Emulate system reboot
@@ -648,6 +656,8 @@ pub fn run() -> Result<()> {
             kmi,
             package_name,
             stage_from,
+            soft_reboot,
+            ro_partitions,
         } => {
             if let Some(port) = magica {
                 return crate::magica::run(port, &package_name, allow_shell).map_err(|e| {
@@ -660,6 +670,16 @@ pub fn run() -> Result<()> {
                 info!("Restoring adb properties (post-magica cleanup)...");
                 if let Err(e) = crate::magica::disable_adb_root() {
                     error!("disable adb root failed: {e}");
+                }
+            }
+            if ro_partitions {
+                let count = utils::set_partitions_ro();
+                info!("set {count} partition(s) read-only");
+            }
+            if soft_reboot {
+                info!("late-load complete, triggering soft-reboot...");
+                if let Err(e) = crate::init_event::soft_reboot() {
+                    error!("soft-reboot failed: {e}");
                 }
             }
             result
