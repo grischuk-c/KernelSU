@@ -67,6 +67,10 @@ enum Commands {
         /// Stage ksud from specified path
         #[arg(long, default_value_t = String::from("/data/local/tmp/.ksud-stage"))]
         stage_from: String,
+
+        /// Trigger a soft-reboot after late-load completes successfully
+        #[arg(long)]
+        soft_reboot: bool,
     },
 
     /// Emulate system reboot
@@ -648,6 +652,7 @@ pub fn run() -> Result<()> {
             kmi,
             package_name,
             stage_from,
+            soft_reboot,
         } => {
             if let Some(port) = magica {
                 return crate::magica::run(port, &package_name, allow_shell).map_err(|e| {
@@ -661,6 +666,10 @@ pub fn run() -> Result<()> {
                 if let Err(e) = crate::magica::disable_adb_root() {
                     error!("disable adb root failed: {e}");
                 }
+            }
+            if soft_reboot && result.is_ok() {
+                info!("Late-load succeeded, triggering soft-reboot...");
+                return init_event::soft_reboot();
             }
             result
         }
@@ -757,7 +766,6 @@ pub fn run() -> Result<()> {
             BootInfo::CurrentKmi => {
                 let kmi = crate::boot_patch::get_current_kmi()?;
                 println!("{kmi}");
-                // return here to avoid printing the error message
                 return Ok(());
             }
             BootInfo::SupportedKmis => {
