@@ -1,0 +1,42 @@
+name: Build
+
+on:
+  push:
+    branches: [ "main", "dev", "ci" ]
+    paths:
+      - '.github/workflows/build-lkm2.yml'
+      - '.github/workflows/ksud2.yml'
+      - '.github/scripts/setup-rust-build.sh'
+      - 'kernel/**'
+      - 'userspace/**'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+  pull_request:
+    branches: [ "main", "dev" ]
+    paths:
+      - '.github/workflows/build-lkm2.yml'
+      - '.github/workflows/ksud2.yml'
+      - '.github/scripts/setup-rust-build.sh'
+      - 'kernel/**'
+      - 'userspace/**'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  build-lkm:
+    uses: ./.github/workflows/build-lkm2.yml
+    secrets: inherit
+
+  build-ksuinit:
+    uses: ./.github/workflows/ksuinit2.yml
+
+  build-ksud:
+    needs: [build-lkm, build-ksuinit]
+    uses: ./.github/workflows/ksud2.yml
+    with:
+      target: aarch64-linux-android
+      pack_lkm: true
+      pack_ksuinit: true
+
