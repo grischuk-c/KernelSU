@@ -674,7 +674,6 @@ pub fn run() -> Result<()> {
             if soft_reboot && result.is_ok() {
                 info!("Performing soft-reboot...");
                 if utils::create_daemon(false)? {
-                    std::thread::sleep(std::time::Duration::from_secs(3));
                     crate::soft_reboot::soft_reboot()?;
                 }
             }
