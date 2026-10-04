@@ -224,8 +224,8 @@ void escape_to_root_for_adb_root(void)
     ret = ksu_samsung_kdp_commit_creds(cred);
     if (ret) {
         pr_err("Samsung KDP adbd credential install failed: %d\n", ret);
-	abort_creds(cred);
-	return;
+        abort_creds(cred);
+        return;
     }
     ksu_samsung_defex_sync_current();
 }

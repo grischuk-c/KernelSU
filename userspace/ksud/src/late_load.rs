@@ -47,10 +47,11 @@ fn clone_pid_environ(pid: u32) {
 
 pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool, soft_reboot: bool) -> Result<()> {
     utils::daemonize(false)?;
-    utils::switch_mnt_ns(1).context("failed to switch to init mnt ns")?;
 
-    // Start with a basic init environ
-    clone_pid_environ(1);
+    if soft_reboot {
+        utils::switch_mnt_ns(1).context("failed to switch to init mnt ns")?;
+        clone_pid_environ(1);
+    }
 
     info!("late-load command triggered!");
     dump_process_info("late-load start");
@@ -73,7 +74,6 @@ pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool, soft_r
 
         // 4. Load kernelsu.ko from memory with manual relocation
         info!("Loading kernelsu.ko for KMI {kmi}...");
-        // bundled flag is meaningless in jailbreak mode since we can't flash boot to update it.
         let params = if allow_shell {
             cstr!("allow_shell=1")
         } else {
@@ -88,19 +88,19 @@ pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool, soft_r
     // will be blocked by SELinux because its fsec->sid is still u:r:vendor_modprobe:s0 instead of u:r:ksu:s0.
     utils::reset_std()?;
 
-    // Upgrade to a full android environ so that modules can be properly loaded
-    if sys_prop::init().is_ok() {
-        if let Some(val) = sys_prop::get("init.svc_debug_pid.zygote") {
-            if let Ok(pid) = val.parse::<u32>() {
-                clone_pid_environ(pid);
-                info!("cloned env from zygote pid={pid}");
+    if soft_reboot {
+        if sys_prop::init().is_ok() {
+            if let Some(val) = sys_prop::get("init.svc_debug_pid.zygote") {
+                if let Ok(pid) = val.parse::<u32>() {
+                    clone_pid_environ(pid);
+                    info!("cloned env from zygote pid={pid}");
+                }
             }
+        } else {
+            warn!("could not init sys_prop, skipping zygote env clone");
         }
-    } else {
-        warn!("could not init sys_prop, skipping zygote env clone");
     }
 
-    // Append KSU binary dir to PATH
     let mut paths: Vec<_> = std::env::var_os("PATH")
         .map_or_else(Vec::new, |v| std::env::split_paths(&v).collect());
     paths.push(defs::BINARY_DIR.trim_end_matches('/').into());
@@ -117,9 +117,6 @@ pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool, soft_r
     utils::install(None, None).context("Failed to install ksud")?;
 
     if soft_reboot {
-        // soft_reboot runs everything below except late-load
-        // pointless to call module's late-load as it will only confuse them so skip that too
-        // when we are going to immediately soft reboot
         return Ok(());
     }
 
@@ -173,7 +170,7 @@ pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool, soft_r
     init_event::run_stage("boot-completed", false);
 
     // 14. Restart Manager so it gets a fresh ksu fd from the newly loaded kernel module
-    /*info!("Restarting KernelSU Manager {package_name}...");
+    info!("Restarting KernelSU Manager {package_name}...");
     let _ = Command::new("am")
         .args(["force-stop", package_name])
         .status();
@@ -184,6 +181,6 @@ pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool, soft_r
             &format!("{package_name}/me.weishu.kernelsu.ui.MainActivity"),
         ])
         .status();
-    */
+
     Ok(())
 }
