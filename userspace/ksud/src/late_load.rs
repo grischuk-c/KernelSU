@@ -45,7 +45,7 @@ fn clone_pid_environ(pid: u32) {
     }
 }
 
-pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool, soft_reboot: bool) -> Result<()> {
+/*pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool, soft_reboot: bool) -> Result<()> {
     utils::daemonize(false)?;
 
     if soft_reboot {
@@ -183,4 +183,79 @@ pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool, soft_r
         .status();
 
     Ok(())
+}*/
+
+pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool, soft_reboot: bool) -> Result<()> {
+    utils::daemonize(false)?;
+    utils::switch_mnt_ns(1).context("failed to switch to init mnt ns")?;
+
+    // Start with a basic init environ
+    clone_pid_environ(1);
+
+    info!("late-load command triggered!");
+    dump_process_info("late-load start");
+
+    // 1. Check if KernelSU is already loaded
+    if ksuinit::has_kernelsu() {
+        info!("KernelSU already loaded, skip loading ko");
+    } else {
+        // 2. Detect current KMI version
+        let kmi = kmi.map_or_else(
+            || crate::boot_patch::get_current_kmi().context("Failed to detect current KMI version"),
+            Ok,
+        )?;
+        info!("Detected KMI: {kmi}");
+
+        // 3. Get kernelsu.ko from embedded assets
+        let ko_name = format!("{kmi}_kernelsu.ko");
+        let ko_data = assets::get_asset_data(&ko_name)
+            .with_context(|| format!("Failed to get {ko_name} from assets"))?;
+
+        // 4. Load kernelsu.ko from memory with manual relocation
+        info!("Loading kernelsu.ko for KMI {kmi}...");
+        // bundled flag is meaningless in jailbreak mode since we can't flash boot to update it.
+        let params = if allow_shell {
+            cstr!("allow_shell=1")
+        } else {
+            cstr!("")
+        };
+        ksuinit::load_module(&ko_data, params).context("Failed to load kernelsu.ko")?;
+        info!("kernelsu.ko loaded successfully!");
+        dump_process_info("after load_module");
+    }
+
+    // We need to reset stdin/stdout/stderr; otherwise, sending file descriptors via cmd transactions
+    // will be blocked by SELinux because its fsec->sid is still u:r:vendor_modprobe:s0 instead of u:r:ksu:s0.
+    utils::reset_std()?;
+
+    // Upgrade to a full android environ so that modules can be properly loaded
+    if sys_prop::init().is_ok() {
+        if let Some(val) = sys_prop::get("init.svc_debug_pid.zygote") {
+            if let Ok(pid) = val.parse::<u32>() {
+                clone_pid_environ(pid);
+                info!("cloned env from zygote pid={pid}");
+            }
+        }
+    } else {
+        warn!("could not init sys_prop, skipping zygote env clone");
+    }
+
+    // Append KSU binary dir to PATH
+    let mut paths: Vec<_> = std::env::var_os("PATH")
+        .map_or_else(Vec::new, |v| std::env::split_paths(&v).collect());
+    paths.push(defs::BINARY_DIR.trim_end_matches('/').into());
+    if let Ok(new_path) = std::env::join_paths(paths) {
+        unsafe { std::env::set_var("PATH", new_path) };
+    }
+
+    utils::umask(0);
+
+    if let Err(e) = crate::module_config::clear_all_temp_configs() {
+        warn!("clear temp configs failed: {e}");
+    }
+
+    utils::install(None, None).context("Failed to install ksud")?;
+
+    return Ok(());
 }
+
