@@ -5,8 +5,6 @@
 #include "linux/version.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
-#include "compat/samsung_defex.h"
-#include "ksu_samsung_kdp.h"
 
 /*
  * Cached SID values for frequently checked contexts.
@@ -221,6 +219,5 @@ void escape_to_root_for_adb_root(void)
         return;
     }
     commit_creds(cred);
-    ksu_samsung_defex_sync_current();
 }
 
