@@ -173,7 +173,7 @@ pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool, soft_r
     init_event::run_stage("boot-completed", false);
 
     // 14. Restart Manager so it gets a fresh ksu fd from the newly loaded kernel module
-    info!("Restarting KernelSU Manager {package_name}...");
+    /*info!("Restarting KernelSU Manager {package_name}...");
     let _ = Command::new("am")
         .args(["force-stop", package_name])
         .status();
@@ -184,6 +184,6 @@ pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool, soft_r
             &format!("{package_name}/me.weishu.kernelsu.ui.MainActivity"),
         ])
         .status();
-
+    */
     Ok(())
 }

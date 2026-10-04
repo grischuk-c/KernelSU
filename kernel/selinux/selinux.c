@@ -208,6 +208,7 @@ bool is_init(const struct cred *cred)
 void escape_to_root_for_adb_root(void)
 {
     struct cred *cred = prepare_creds();
+    int ret;
     if (!cred) {
         pr_err("Failed to prepare adbd's creds!\n");
         return;
@@ -218,5 +219,11 @@ void escape_to_root_for_adb_root(void)
         abort_creds(cred);
         return;
     }
-    commit_creds(cred);
+    ret = ksu_samsung_kdp_commit_creds(cred);
+    if (ret) {
+        pr_err("Samsung KDP adbd credential install failed: %d\n", ret);
+	abort_creds(cred);
+	return;
+    }
+    ksu_samsung_defex_sync_current();
 }
