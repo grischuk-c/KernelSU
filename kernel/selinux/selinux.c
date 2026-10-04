@@ -5,6 +5,8 @@
 #include "linux/version.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
+#include "compat/samsung_defex.h"
+#include "ksu_samsung_kdp.h"
 
 /*
  * Cached SID values for frequently checked contexts.
