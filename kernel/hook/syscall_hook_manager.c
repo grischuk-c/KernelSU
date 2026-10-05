@@ -46,10 +46,11 @@ static bool rkp_sucompat_should_redirect(int syscall_nr)
         return false;
     }
 
-    if (static_branch_unlikely(&ksu_adb_root) &&
-        (syscall_nr == __NR_execve || syscall_nr == __NR_execveat))
+    if (current->pid != 1 && is_init(current_cred()) &&
+        syscall_nr == __NR_execve &&
+        static_branch_unlikely(&ksu_adb_root))
         return true;
-
+    
     return ksu_su_compat_enabled &&
            ksu_is_allow_uid_for_current(current_uid().val);
 }
